@@ -15,6 +15,8 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import org.apache.commons.lang.StringUtils;
 import org.eclipse.smarthome.binding.weatherunderground.WeatherUndergroundBindingConstants;
@@ -39,7 +41,6 @@ import org.eclipse.smarthome.io.net.http.HttpUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.Sets;
 import com.google.gson.Gson;
 import com.google.gson.JsonSyntaxException;
 
@@ -57,7 +58,8 @@ public class WeatherUndergroundHandler extends BaseThingHandler {
     private static final String FEATURE_CONDITIONS = "conditions";
     private static final String FEATURE_FORECAST10DAY = "forecast10day";
     private static final String FEATURE_GEOLOOKUP = "geolookup";
-    private static final Set<String> USUAL_FEATURES = Sets.newHashSet(FEATURE_CONDITIONS, FEATURE_FORECAST10DAY);
+    private static final Set<String> USUAL_FEATURES = Stream.of(FEATURE_CONDITIONS, FEATURE_FORECAST10DAY)
+            .collect(Collectors.toSet());
 
     private static final int DEFAULT_REFRESH_PERIOD = 30;
 
@@ -295,33 +297,43 @@ public class WeatherUndergroundHandler extends BaseThingHandler {
             logger.debug("URL = {}", urlStr);
 
             // Run the HTTP request and get the JSON response from Weather Underground
-            String response = HttpUtil.executeUrl("GET", urlStr, 30 * 1000);
-            logger.debug("weatherData = {}", response);
+            String response = null;
+            try {
+                response = HttpUtil.executeUrl("GET", urlStr, 30 * 1000);
+                logger.debug("weatherData = {}", response);
+            } catch (IllegalArgumentException e) {
+                // catch Illegal character in path at index XX: http://api.wunderground.com/...
+                error = "Error creating URI with location parameter: '" + location + "'";
+                errorDetail = e.getMessage();
+                statusDescr = "@text/offline.uri-error";
+            }
 
             // Map the JSON response to an object
-            result = gson.fromJson(response, WeatherUndergroundJsonData.class);
-            if (result == null) {
-                errorDetail = "no data returned";
-            } else if (result.getResponse() == null) {
-                errorDetail = "missing response sub-object";
-            } else if (result.getResponse().getErrorDescription() != null) {
-                if ("keynotfound".equals(result.getResponse().getErrorType())) {
-                    error = "API key has to be fixed";
-                    statusDescr = "@text/offline.comm-error-invalid-api-key";
-                }
-                errorDetail = result.getResponse().getErrorDescription();
-            } else {
-                resultOk = true;
-                for (String feature : features) {
-                    if (feature.equals(FEATURE_CONDITIONS) && result.getCurrent() == null) {
-                        resultOk = false;
-                        errorDetail = "missing current_observation sub-object";
-                    } else if (feature.equals(FEATURE_FORECAST10DAY) && result.getForecast() == null) {
-                        resultOk = false;
-                        errorDetail = "missing forecast sub-object";
-                    } else if (feature.equals(FEATURE_GEOLOOKUP) && result.getLocation() == null) {
-                        resultOk = false;
-                        errorDetail = "missing location sub-object";
+            if (response != null) {
+                result = gson.fromJson(response, WeatherUndergroundJsonData.class);
+                if (result == null) {
+                    errorDetail = "no data returned";
+                } else if (result.getResponse() == null) {
+                    errorDetail = "missing response sub-object";
+                } else if (result.getResponse().getErrorDescription() != null) {
+                    if ("keynotfound".equals(result.getResponse().getErrorType())) {
+                        error = "API key has to be fixed";
+                        statusDescr = "@text/offline.comm-error-invalid-api-key";
+                    }
+                    errorDetail = result.getResponse().getErrorDescription();
+                } else {
+                    resultOk = true;
+                    for (String feature : features) {
+                        if (feature.equals(FEATURE_CONDITIONS) && result.getCurrent() == null) {
+                            resultOk = false;
+                            errorDetail = "missing current_observation sub-object";
+                        } else if (feature.equals(FEATURE_FORECAST10DAY) && result.getForecast() == null) {
+                            resultOk = false;
+                            errorDetail = "missing forecast sub-object";
+                        } else if (feature.equals(FEATURE_GEOLOOKUP) && result.getLocation() == null) {
+                            resultOk = false;
+                            errorDetail = "missing location sub-object";
+                        }
                     }
                 }
             }

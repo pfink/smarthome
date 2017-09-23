@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.StringTokenizer;
 import java.util.TimeZone;
 
+import org.eclipse.jdt.annotation.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,10 +37,10 @@ public abstract class AbstractExpression<E extends AbstractExpressionPart> imple
 
     private String expression;
     private String delimiters;
-    private List<E> expressionParts = Collections.emptyList();
+    private List<@NonNull E> expressionParts = Collections.emptyList();
 
     private boolean continueSearch;
-    private ArrayList<Date> candidates = new ArrayList<Date>();
+    private List<Date> candidates = new ArrayList<>();
     private Date startDate = null;
     private TimeZone timeZone = null;
 
@@ -165,7 +166,6 @@ public abstract class AbstractExpression<E extends AbstractExpressionPart> imple
             position++;
             parts.add(parseToken(token, position));
         }
-        Collections.sort(parts);
         setExpressionParts(parts);
 
         validateExpression();
@@ -338,20 +338,20 @@ public abstract class AbstractExpression<E extends AbstractExpressionPart> imple
      */
     abstract protected void populateWithSeeds();
 
-    public ExpressionPart getExpressionPart(Class<?> part) {
+    public <T extends ExpressionPart> T getExpressionPart(Class<T> part) {
         for (ExpressionPart aPart : getExpressionParts()) {
             if (aPart.getClass().equals(part)) {
-                return aPart;
+                return part.cast(aPart);
             }
         }
         return null;
     }
 
-    protected ArrayList<Date> getCandidates() {
+    protected List<Date> getCandidates() {
         return candidates;
     }
 
-    protected void setCandidates(ArrayList<Date> candidates) {
+    protected void setCandidates(List<Date> candidates) {
         this.candidates = candidates;
     }
 
@@ -359,12 +359,13 @@ public abstract class AbstractExpression<E extends AbstractExpressionPart> imple
         this.candidates = null;
     }
 
-    public List<E> getExpressionParts() {
+    public List<@NonNull E> getExpressionParts() {
         return expressionParts;
     }
 
-    public void setExpressionParts(List<E> expressionParts) {
+    public void setExpressionParts(List<@NonNull E> expressionParts) {
         synchronized (this) {
+            Collections.sort(expressionParts);
             this.expressionParts = Collections.unmodifiableList(new LinkedList<>(expressionParts));
         }
     }

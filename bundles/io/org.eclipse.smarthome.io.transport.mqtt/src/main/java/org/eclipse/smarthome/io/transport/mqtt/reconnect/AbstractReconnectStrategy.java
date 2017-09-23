@@ -52,4 +52,18 @@ public abstract class AbstractReconnectStrategy {
      * resources.
      */
     public abstract void connectionEstablished();
+
+    /**
+     * Start the reconnect strategy handling.
+     */
+    public abstract void start();
+
+    /**
+     * Stop the reconnect strategy handling.
+     *
+     * <p>
+     * It must be possible to restart a reconnect strategy again after it has been stopped.
+     */
+    public abstract void stop();
+
 }

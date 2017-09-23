@@ -16,6 +16,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import javax.naming.ConfigurationException;
 
 import org.apache.commons.lang.StringUtils;
+import org.eclipse.jdt.annotation.NonNull;
 import org.eclipse.paho.client.mqttv3.IMqttActionListener;
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.IMqttToken;
@@ -131,19 +132,20 @@ public class MqttBrokerConnection {
      *            ssl://localhost:8883
      * @throws ConfigurationException
      */
-    @SuppressWarnings("null")
-    public MqttBrokerConnection(String name, String url, boolean textualConfiguredBroker)
+    public MqttBrokerConnection(@NonNull String name, @NonNull String url, boolean textualConfiguredBroker)
             throws ConfigurationException {
         this.textualConfiguredBroker = textualConfiguredBroker;
-        this.name = name != null ? name.trim() : null;
-        this.url = url != null ? url.trim() : null;
-        if (StringUtils.isBlank(this.name)) {
+
+        if (name.isEmpty()) {
             throw new ConfigurationException("No name for the broker set!");
         }
-        if (StringUtils.isBlank(url) || (!url.startsWith("tcp://") && !url.startsWith("ssl://"))) {
+        if (url.isEmpty() || (!url.startsWith("tcp://") && !url.startsWith("ssl://"))) {
             throw new ConfigurationException(
                     "No valid url for the broker set! Must be tcp://localhost:1234 or ssl://localhost:1234. Port is optional.");
         }
+
+        this.name = name;
+        this.url = url;
         setReconnectStrategy(new PeriodicReconnectStrategy());
     }
 
@@ -509,13 +511,17 @@ public class MqttBrokerConnection {
 
             @Override
             public void onFailure(IMqttToken asyncActionToken, Throwable exception) {
-                isConnecting = false;
                 for (final MqttConnectionObserver connectionObserver : connectionObservers) {
                     connectionObserver.connectionStateChanged(
                             isConnected() ? MqttConnectionState.CONNECTED : MqttConnectionState.DISCONNECTED,
                             asyncActionToken.getException());
                 }
-                reconnectStrategy.lostConnection();
+
+                // If we tried to connect via start(), use the reconnect strategy to try it again
+                if (isConnecting) {
+                    isConnecting = false;
+                    reconnectStrategy.lostConnection();
+                }
             }
         };
     }
@@ -542,6 +548,11 @@ public class MqttBrokerConnection {
             return;
         }
 
+        // Ensure the reconnect strategy is started
+        if (reconnectStrategy != null) {
+            reconnectStrategy.start();
+        }
+
         if (StringUtils.isBlank(clientId) || clientId.length() > 23) {
             clientId = MqttClient.generateClientId();
         }
@@ -551,7 +562,6 @@ public class MqttBrokerConnection {
         MqttDefaultFilePersistence dataStore = new MqttDefaultFilePersistence(tmpDir);
 
         // Create client
-        logger.debug("Creating new client for '{}' using id '{}' and file store '{}'", getUrl(), clientId, tmpDir);
         try {
             client = new MqttAsyncClient(getUrl(), clientId, dataStore);
         } catch (org.eclipse.paho.client.mqttv3.MqttException e) {
@@ -559,7 +569,8 @@ public class MqttBrokerConnection {
         }
         client.setCallback(clientCallbacks);
 
-        logger.info("Starting MQTT broker connection '{}' with clientid {}", getName(), getClientId());
+        logger.info("Starting MQTT broker connection '{}' to '{}' with clientid {} and file store '{}'", getName(),
+                getUrl(), getClientId(), tmpDir);
 
         // Perform the connection attempt
         isConnecting = true;
@@ -573,9 +584,21 @@ public class MqttBrokerConnection {
 
     /**
      * Close the MQTT connection.
+     *
+     * You can re-establish a connection calling {@link #start()} again.
      */
     public synchronized void close() {
-        logger.trace("Closing connection to broker '{}'", getName());
+        logger.trace("Closing the MQTT broker connection '{}'", getName());
+
+        // Abort a connection attempt
+        isConnecting = false;
+
+        // Stop the reconnect strategy
+        if (reconnectStrategy != null) {
+            reconnectStrategy.stop();
+        }
+
+        // Close connection
         try {
             if (isConnected()) {
                 client.disconnect();

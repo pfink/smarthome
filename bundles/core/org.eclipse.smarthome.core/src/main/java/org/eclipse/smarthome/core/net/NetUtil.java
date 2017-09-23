@@ -13,6 +13,8 @@ import java.net.InetAddress;
 import java.net.InterfaceAddress;
 import java.net.NetworkInterface;
 import java.net.SocketException;
+import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
@@ -33,7 +35,7 @@ import org.slf4j.LoggerFactory;
  * @author Mark Herwege - Added methods to find broadcast address(es)
  * @author Stefan Triller - Converted to OSGi service with primary ipv4 conf
  */
-@Component(configurationPid = "org.eclipse.smarthome.network", property = {
+@Component(configurationPid = "org.eclipse.smarthome.network", property = { "service.pid=org.eclipse.smarthome.network",
         "service.config.description.uri=system:network", "service.config.label=Network Settings",
         "service.config.category=system" })
 public class NetUtil implements NetworkAddressService {
@@ -184,6 +186,48 @@ public class NetUtil implements NetworkAddressService {
         } else {
             return null;
         }
+    }
+
+    /**
+     * Gets every IPv4+IPv6 Address on each Interface except the loopback interface.
+     * The Address format is in the CIDR notation which is ip/prefix-length e.g. 129.31.31.1/24.
+     *
+     * Example to get a list of only IPv4 addresses in string representation:
+     * List<String> l = getAllInterfaceAddresses().stream().filter(a->a.getAddress() instanceof
+     * Inet4Address).map(a->a.getAddress().getHostAddress()).collect(Collectors.toList());
+     *
+     * @return The collected IPv4 and IPv6 Addresses
+     */
+    public static Collection<CidrAddress> getAllInterfaceAddresses() {
+        Collection<CidrAddress> interfaceIPs = new ArrayList<>();
+        Enumeration<NetworkInterface> en;
+        try {
+            en = NetworkInterface.getNetworkInterfaces();
+        } catch (SocketException ex) {
+            LOGGER.error("Could not find interface IP addresses: {}", ex.getMessage(), ex);
+            return interfaceIPs;
+        }
+
+        while (en.hasMoreElements()) {
+            NetworkInterface networkInterface = en.nextElement();
+
+            try {
+                if (!networkInterface.isUp() || networkInterface.isLoopback()) {
+                    continue;
+                }
+            } catch (SocketException ignored) {
+                continue;
+            }
+
+            for (InterfaceAddress cidr : networkInterface.getInterfaceAddresses()) {
+                final InetAddress address = cidr.getAddress();
+                assert address != null; // NetworkInterface.getInterfaceAddresses() should return only non-null
+                                        // addresses
+                interfaceIPs.add(new CidrAddress(address, cidr.getNetworkPrefixLength()));
+            }
+        }
+
+        return interfaceIPs;
     }
 
     /**
