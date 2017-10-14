@@ -10,10 +10,10 @@ package org.eclipse.smarthome.binding.tradfri.internal.discovery;
 import static org.eclipse.smarthome.binding.tradfri.TradfriBindingConstants.*;
 
 import java.util.Arrays;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 
-import org.eclipse.smarthome.binding.tradfri.TradfriBindingConstants;
 import org.eclipse.smarthome.binding.tradfri.handler.TradfriGatewayHandler;
 import org.eclipse.smarthome.binding.tradfri.internal.DeviceUpdateListener;
 import org.eclipse.smarthome.config.discovery.AbstractDiscoveryService;
@@ -32,6 +32,7 @@ import com.google.gson.JsonSyntaxException;
  * This class identifies devices that are available on the gateway and adds discovery results for them.
  *
  * @author Kai Kreuzer - Initial contribution
+ * @author Andre Fuechsel - fixed the results removal
  */
 public class TradfriDiscoveryService extends AbstractDiscoveryService implements DeviceUpdateListener {
 
@@ -39,20 +40,26 @@ public class TradfriDiscoveryService extends AbstractDiscoveryService implements
 
     private final TradfriGatewayHandler handler;
 
-    private final String[] COLOR_TEMP_MODELS = new String[] { "TRADFRI bulb E27 WS opal 980lm",
-            "TRADFRI bulb GU10 WS 400lm", "TRADFRI bulb E14 WS opal 400lm" };
+    private static final String[] COLOR_TEMP_MODELS = new String[] { "TRADFRI bulb E27 WS opal 980lm",
+            "TRADFRI bulb E27 WS clear 950lm", "TRADFRI bulb GU10 WS 400lm", "TRADFRI bulb E14 WS opal 400lm",
+            "FLOALT panel WS 30x30", "FLOALT panel WS 60x60", "FLOALT panel WS 30x90" };
 
-    private final String COLOR_MODELS_IDENTIFIER = "CWS";
+    private static final String COLOR_MODELS_IDENTIFIER = "CWS";
 
     public TradfriDiscoveryService(TradfriGatewayHandler bridgeHandler) {
-        super(TradfriBindingConstants.SUPPORTED_LIGHT_TYPES_UIDS, 10, true);
+        super(SUPPORTED_LIGHT_TYPES_UIDS, 10, true);
         this.handler = bridgeHandler;
     }
 
     @Override
     protected void startScan() {
-        removeOlderResults(getTimestampOfLastScan());
         handler.startScan();
+    }
+
+    @Override
+    protected synchronized void stopScan() {
+        super.stopScan();
+        removeOlderResults(getTimestampOfLastScan());
     }
 
     public void activate() {
@@ -61,6 +68,7 @@ public class TradfriDiscoveryService extends AbstractDiscoveryService implements
 
     @Override
     public void deactivate() {
+        removeOlderResults(new Date().getTime());
         handler.unregisterDeviceUpdateListener(this);
     }
 
