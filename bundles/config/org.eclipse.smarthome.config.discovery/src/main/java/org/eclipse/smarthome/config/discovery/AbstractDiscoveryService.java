@@ -63,6 +63,7 @@ public abstract class AbstractDiscoveryService implements DiscoveryService {
     protected @Nullable ScanListener scanListener = null;
 
     private boolean backgroundDiscoveryEnabled;
+    private boolean backgroundDiscoveryStarted = false;
 
     private final Map<ThingUID, DiscoveryResult> cachedResults = new HashMap<>();
 
@@ -379,6 +380,7 @@ public abstract class AbstractDiscoveryService implements DiscoveryService {
         }
         if (this.backgroundDiscoveryEnabled) {
             startBackgroundDiscovery();
+            this.backgroundDiscoveryStarted = true;
             logger.debug("Background discovery for discovery service '{}' enabled.", this.getClass().getName());
         }
     }
@@ -399,12 +401,14 @@ public abstract class AbstractDiscoveryService implements DiscoveryService {
             if (property != null) {
                 boolean enabled = getAutoDiscoveryEnabled(property);
 
-                if (this.backgroundDiscoveryEnabled && !enabled) {
+                if (this.backgroundDiscoveryEnabled && !enabled && this.backgroundDiscoveryStarted) {
                     stopBackgroundDiscovery();
+                    this.backgroundDiscoveryStarted = false;
                     logger.debug("Background discovery for discovery service '{}' disabled.",
                             this.getClass().getName());
-                } else if (!this.backgroundDiscoveryEnabled && enabled) {
+                } else if (!this.backgroundDiscoveryEnabled && enabled && !this.backgroundDiscoveryStarted) {
                     startBackgroundDiscovery();
+                    this.backgroundDiscoveryStarted = true;
                     logger.debug("Background discovery for discovery service '{}' enabled.", this.getClass().getName());
                 }
                 this.backgroundDiscoveryEnabled = enabled;
@@ -419,8 +423,9 @@ public abstract class AbstractDiscoveryService implements DiscoveryService {
      * discovery is enabled at the time of component deactivation.
      */
     protected void deactivate() {
-        if (this.backgroundDiscoveryEnabled) {
+        if (this.backgroundDiscoveryStarted) {
             stopBackgroundDiscovery();
+            this.backgroundDiscoveryStarted = false;
         }
     }
 
